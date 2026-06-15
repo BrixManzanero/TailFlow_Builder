@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TailFlow — Consolidated Report</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>/*CSS*/</style>
+</head>
+<body>
+<div class="shell">
+  <div class="top">
+    <div class="title">
+      <h1>TailFlow — Consolidated Report</h1>
+      <div class="s">Auto-extracted from platform exports · <b id="span">—</b> · all values in PHP</div>
+    </div>
+    <div class="stamp" id="stamp">EXTRACTED —</div>
+  </div>
+  <div class="kstrip" id="kstrip"></div>
+  <div class="sheet"><div class="scroll" id="scroll"></div></div>
+  <div class="tabs">
+    <div class="tab active" data-t="revenue"><span class="sw" style="background:var(--navy)"></span>Revenue (GMV &amp; NMV)</div>
+    <div class="tab" data-t="conversion"><span class="sw" style="background:#9aa6b2"></span>Conversion</div>
+    <div class="tab" data-t="roas"><span class="sw" style="background:#9aa6b2"></span>ROAS</div>
+    <div class="tab" data-t="products"><span class="sw" style="background:var(--green)"></span>Product Performance</div>
+  </div>
+  <div class="foot" id="foot"></div>
+</div>
+<script>
+const D = /*DATA*/;
+const peso=(v,dec=2)=>Number(v).toLocaleString('en-US',{minimumFractionDigits:dec,maximumFractionDigits:dec});
+const intc=v=>Number(v).toLocaleString('en-US');
+const PLAT=['Shopee','Shopify','Lazada','TikTok'];
+const years=Object.keys(D.products||{});
+let tab='revenue', pYear=years.includes('2025')?'2025':(years[0]||null), pSort={key:'gmv',dir:-1};
+
+document.getElementById('span').textContent=(D.summary&&D.summary.span)||'awaiting revenue export';
+document.getElementById('stamp').textContent='EXTRACTED '+((D.meta&&D.meta.extracted)||'—');
+document.getElementById('foot').textContent='Source: '+((D.meta&&D.meta.source)||'TailFlow exports')+
+  ((D.meta&&D.meta.generated)?(' · generated '+D.meta.generated):'')+
+  ' · Revenue & Product Performance populate from live exports; Conversion & ROAS await their exports.';
+
+function kstrip(){
+  const box=document.getElementById('kstrip');
+  if(!D.summary){box.innerHTML='';return;}
+  const s=D.summary;
+  const top=Object.entries(s.gmv_by_platform).filter(([k])=>k!=='Total').sort((a,b)=>b[1]-a[1])[0];
+  box.innerHTML=`
+    <div class="k"><div class="l">Months</div><div class="v">${s.months}</div><div class="d">${s.span}</div></div>
+    <div class="k"><div class="l">Total GMV</div><div class="v">₱${peso(s.gmv_by_platform.Total,0)}</div><div class="d">all platforms</div></div>
+    <div class="k"><div class="l">Total NMV</div><div class="v">₱${peso(s.nmv_total,0)}</div><div class="d">net of returns/cancels</div></div>
+    <div class="k"><div class="l">Top channel</div><div class="v">${top[0]}</div><div class="d">₱${peso(top[1],0)} GMV</div></div>`;
+}
+
+function revenue(){
+  if(!D.revenue||!D.revenue.length)return placeholder('revenue');
+  let h=`<table><thead><tr>
+      <th class="band x" rowspan="2" style="text-align:left;left:0;position:sticky;z-index:4">Month</th>
+      <th class="band g" colspan="5">GMV by Platform (PHP)</th>
+      <th class="band m" rowspan="2">MoM&nbsp;Δ%</th>
+      <th class="band n" colspan="5">NMV by Platform (PHP)</th>
+    </tr><tr>`;
+  PLAT.forEach(p=>h+=`<th class="colh">${p}</th>`); h+=`<th class="colh">Total GMV</th>`;
+  PLAT.forEach(p=>h+=`<th class="colh n">${p}</th>`); h+=`<th class="colh n">Total NMV</th></tr></thead><tbody>`;
+  D.revenue.forEach(r=>{
+    h+=`<tr><td class="month">${r.month}</td>`;
+    PLAT.forEach(p=>h+=`<td class="num">${peso(r.gmv[p])}</td>`);
+    h+=`<td class="num tot">${peso(r.gmv.Total)}</td>`;
+    const m=r.mom, cls=m==null?'na':m>=0?'up':'dn';
+    h+=`<td class="mom ${cls}">${m==null?'—':(m>=0?'+':'')+m.toFixed(2)+'%'}</td>`;
+    PLAT.forEach(p=>h+=`<td class="num">${peso(r.nmv[p])}</td>`);
+    h+=`<td class="num totn">${peso(r.nmv.Total)}</td></tr>`;
+  });
+  const g=D.summary.gmv_by_platform;
+  h+=`<tr class="grand"><td class="month">TOTAL</td>`;
+  PLAT.forEach(p=>h+=`<td class="num">${peso(g[p],0)}</td>`);
+  h+=`<td class="num">${peso(g.Total,0)}</td><td></td>`;
+  const nsum={};PLAT.forEach(p=>nsum[p]=D.revenue.reduce((a,r)=>a+r.nmv[p],0));
+  PLAT.forEach(p=>h+=`<td class="num">${peso(nsum[p],0)}</td>`);
+  h+=`<td class="num">${peso(D.summary.nmv_total,0)}</td></tr></tbody></table>`;
+  return h;
+}
+
+function products(){
+  if(!years.length||!pYear)return placeholder('products');
+  const y=D.products[pYear], rows=[...y.rows], k=pSort.key, dir=pSort.dir;
+  rows.sort((a,b)=>typeof a[k]==='string'?dir*a[k].localeCompare(b[k]):dir*(a[k]-b[k]));
+  const maxg=Math.max(...rows.map(r=>r.gmv),1);
+  const ar=key=>pSort.key===key?(pSort.dir<0?' ▼':' ▲'):'';
+  let h=`<div class="pctl">
+    <div class="yseg">${years.map(yr=>`<button class="${yr===pYear?'on':''}" data-y="${yr}">${yr}</button>`).join('')}</div>
+    <div class="hint">${y.totals.count} SKUs · total GMV ₱${peso(y.totals.gmv,0)} · ${intc(y.totals.qty)} units sold · click a column to sort</div>
+  </div>
+  <table><thead><tr>
+    <th class="colh n l" style="left:0;position:sticky;z-index:4">#</th>
+    <th class="colh n l sortable" data-k="name">Product${ar('name')}</th>
+    <th class="colh n l sortable" data-k="sku">SKU${ar('sku')}</th>
+    <th class="colh n sortable" data-k="gmv">GMV (PHP)${ar('gmv')}</th>
+    <th class="colh n sortable" data-k="qty">Qty Sold${ar('qty')}</th>
+    <th class="colh n sortable" data-k="stock">Stock${ar('stock')}</th>
+    <th class="colh n sortable" data-k="st">Sell-Through${ar('st')}</th>
+  </tr></thead><tbody>`;
+  rows.forEach((r,i)=>{
+    const stp=(r.st*100).toFixed(1)+'%', stc=r.st>=0.6?'up':r.st<0.3?'dn':'';
+    h+=`<tr><td class="month" style="text-align:right;min-width:34px">${i+1}</td>
+      <td style="text-align:left">${r.name}</td>
+      <td style="text-align:left;color:#5a6675">${r.sku}</td>
+      <td class="num gbar"><i style="width:${(r.gmv/maxg*100).toFixed(1)}%"></i><span>${peso(r.gmv)}</span></td>
+      <td class="num">${intc(r.qty)}</td><td class="num">${intc(r.stock)}</td>
+      <td class="num ${stc}">${stp}</td></tr>`;
+  });
+  h+=`<tr class="grand"><td class="month" style="background:#16233a;color:#fff"></td><td style="text-align:left">TOTAL · ${y.totals.count} products</td><td></td>
+    <td class="num">${peso(y.totals.gmv,0)}</td><td class="num">${intc(y.totals.qty)}</td><td class="num">${intc(y.totals.stock)}</td><td></td></tr>`;
+  h+=`</tbody></table>`;
+  return h;
+}
+
+function placeholder(kind){
+  const cfg={
+    revenue:{t:'Revenue (GMV & NMV)',cols:['Month','Shopee','Shopify','Lazada','TikTok','Total GMV','MoM Δ%','NMV by platform'],
+      d:'Upload the GMV orders and NMV orders exports in the sidebar to populate this sheet — one row per month, MoM change computed automatically.'},
+    products:{t:'Product Performance',cols:['Product','SKU','GMV','Qty Sold','Stock','Sell-Through'],
+      d:'Upload the yearly product exports (2024 / 2025 / 2026) to populate this sheet. The year is read from each file name.'},
+    conversion:{t:'Conversion',cols:['Month','Sessions','Add-to-Cart','Reached Checkout','Orders','CVR %','By platform'],
+      d:'This sheet is wired and ready. Add the Conversion export (sessions → checkout funnel per platform) and it fills the same way Revenue does.'},
+    roas:{t:'ROAS',cols:['Period','Ad Spend','Ad Revenue','Blended ROAS','Shopee ROAS','TikTok ROAS','Meta / Google'],
+      d:'Ready for the ad-performance export. Once spend and attributed revenue are added, blended and per-platform ROAS fill automatically.'}
+  }[kind];
+  return `<div class="ph"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
+    <h3>${cfg.t} — ready to populate</h3><p>${cfg.d}</p>
+    <div class="cols">${cfg.cols.map(c=>`<span>${c}</span>`).join('')}</div></div>`;
+}
+
+function render(){
+  const sc=document.getElementById('scroll');
+  document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('active',t.dataset.t===tab));
+  if(tab==='revenue'){sc.innerHTML=revenue();sc.style.maxHeight='70vh';}
+  else if(tab==='products'){sc.innerHTML=products();sc.style.maxHeight='72vh';
+    sc.querySelectorAll('.yseg button').forEach(b=>b.onclick=()=>{pYear=b.dataset.y;render();});
+    sc.querySelectorAll('th.sortable').forEach(th=>th.onclick=()=>{
+      const k=th.dataset.k; pSort.dir=pSort.key===k?-pSort.dir:(k==='name'||k==='sku'?1:-1); pSort.key=k; render();});
+  } else {sc.innerHTML=placeholder(tab);sc.style.maxHeight='none';}
+}
+document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>{tab=t.dataset.t;render();});
+kstrip();render();
+</script>
+</body>
+</html>
